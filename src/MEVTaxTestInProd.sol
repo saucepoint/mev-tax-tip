@@ -21,8 +21,12 @@ contract MEVTaxTestInProd is BaseHook, Owned {
 
     constructor(IPoolManager _poolManager, address _owner) BaseHook(_poolManager) Owned(_owner) {}
 
-    function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
+    function _beforeInitialize(address, PoolKey calldata key, uint160) internal override returns (bytes4) {
         require(key.fee == LPFeeLibrary.DYNAMIC_FEE_FLAG, "are u dumb or are u stupid");
+
+        // we be lazy as shit so set a max fee of 69 bips by default
+        maxFees[key.toId()] = 6_900;
+
         return BaseHook.beforeInitialize.selector;
     }
 
@@ -32,8 +36,9 @@ contract MEVTaxTestInProd is BaseHook, Owned {
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        uint256 maxFee = maxFees[key.toId()];
-        uint256 topPriorityFee = topPriorityFees[key.toId()][lastBlockSeen[key.toId()]];
+        PoolId poolId = key.toId();
+        uint256 maxFee = maxFees[poolId];
+        uint256 topPriorityFee = topPriorityFees[poolId][lastBlockSeen[poolId]];
         uint256 txPriorityFee = tx.gasprice - block.basefee;
 
         // swap fee is priority fee proportional to the previous top priority fee: `maxFee * (txPriorityFee / topPriorityFee)`
@@ -41,11 +46,11 @@ contract MEVTaxTestInProd is BaseHook, Owned {
         uint24 overrideFee = topPriorityFee != 0 ? uint24((maxFee * txPriorityFee) / topPriorityFee) : uint24(maxFee);
 
         // set state for future blocks / transactions
-        if (lastBlockSeen[key.toId()] != block.number) {
-            lastBlockSeen[key.toId()] = block.number;
+        if (lastBlockSeen[poolId] != block.number) {
+            lastBlockSeen[poolId] = block.number;
 
             // txPriorityFee is the highest priority fee if this is the first tx in the block
-            topPriorityFees[key.toId()][block.number] = txPriorityFee;
+            topPriorityFees[poolId][block.number] = txPriorityFee;
         }
 
         return (

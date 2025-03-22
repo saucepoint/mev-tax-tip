@@ -11,7 +11,8 @@ import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
 import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
-import {Counter} from "../src/Counter.sol";
+import {MEVTaxTestInProd} from "../src/MEVTaxTestInProd.sol";
+import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 
 import {LiquidityAmounts} from "v4-core/test/utils/LiquidityAmounts.sol";
@@ -19,13 +20,13 @@ import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol
 import {EasyPosm} from "./utils/EasyPosm.sol";
 import {Fixtures} from "./utils/Fixtures.sol";
 
-contract CounterTest is Test, Fixtures {
+contract MEVTaxTestInProdTest is Test, Fixtures {
     using EasyPosm for IPositionManager;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using StateLibrary for IPoolManager;
 
-    Counter hook;
+    MEVTaxTestInProd hook;
     PoolId poolId;
 
     uint256 tokenId;
@@ -41,25 +42,21 @@ contract CounterTest is Test, Fixtures {
 
         // Deploy the hook to an address with the correct flags
         address flags = address(
-            uint160(
-                Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
-                    | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
-            ) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
+            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
         );
-        bytes memory constructorArgs = abi.encode(manager); //Add all the necessary constructor arguments from the hook
-        deployCodeTo("Counter.sol:Counter", constructorArgs, flags);
-        hook = Counter(flags);
+        bytes memory constructorArgs = abi.encode(manager, address(this)); //Add all the necessary constructor arguments from the hook
+        deployCodeTo("MEVTaxTestInProd.sol:MEVTaxTestInProd", constructorArgs, flags);
+        hook = MEVTaxTestInProd(flags);
 
         // Create the pool
-        key = PoolKey(currency0, currency1, 3000, 60, IHooks(hook));
+        key = PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
         poolId = key.toId();
         manager.initialize(key, SQRT_PRICE_1_1);
 
-        // Provide full-range liquidity to the pool
-        tickLower = TickMath.minUsableTick(key.tickSpacing);
-        tickUpper = TickMath.maxUsableTick(key.tickSpacing);
+        tickLower = -60;
+        tickUpper = 60;
 
-        uint128 liquidityAmount = 100e18;
+        uint128 liquidityAmount = 1_000_000e18;
 
         (uint256 amount0Expected, uint256 amount1Expected) = LiquidityAmounts.getAmountsForLiquidity(
             SQRT_PRICE_1_1,
@@ -81,44 +78,35 @@ contract CounterTest is Test, Fixtures {
         );
     }
 
-    function testCounterHooks() public {
-        // positions were created in setup()
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 0);
-
-        assertEq(hook.beforeSwapCount(poolId), 0);
-        assertEq(hook.afterSwapCount(poolId), 0);
-
-        // Perform a test swap //
+    /// @dev big test bc fuggit
+    function test_monolithlic() public {
+        // all trades zero for one, exact-input of 1e18
         bool zeroForOne = true;
-        int256 amountSpecified = -1e18; // negative number indicates exact input swap!
-        BalanceDelta swapDelta = swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
-        // ------------------- //
+        int256 amountSpecified = -1e18;
 
-        assertEq(int256(swapDelta.amount0()), amountSpecified);
+        // set base fee and priority
+        vm.fee(1 gwei);
+        vm.txGasPrice(1 gwei + 1 gwei); // 1 gwei priority fee
+        BalanceDelta firstSwap = swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
+        assertApproxEqRel(firstSwap.amount1(), 1e18, 0.007e18); // 1:1 swap, but with a 0.69% fee bip fee
 
-        assertEq(hook.beforeSwapCount(poolId), 1);
-        assertEq(hook.afterSwapCount(poolId), 1);
-    }
+        vm.txGasPrice(1 gwei + 0.01 gwei);
+        BalanceDelta secondSwap = swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
+        assertApproxEqRel(secondSwap.amount1(), 1e18, 0.00008e18); // 0.008% error: 0.0069% fee and price impact
 
-    function testLiquidityHooks() public {
-        // positions were created in setup()
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 0);
+        // second swap gets better output since their fee is much lower
+        assertGt(secondSwap.amount1(), firstSwap.amount1());
 
-        // remove liquidity
-        uint256 liquidityToRemove = 1e18;
-        posm.decreaseLiquidity(
-            tokenId,
-            liquidityToRemove,
-            MAX_SLIPPAGE_REMOVE_LIQUIDITY,
-            MAX_SLIPPAGE_REMOVE_LIQUIDITY,
-            address(this),
-            block.timestamp,
-            ZERO_BYTES
-        );
+        // new block
+        skip(2);
 
-        assertEq(hook.beforeAddLiquidityCount(poolId), 1);
-        assertEq(hook.beforeRemoveLiquidityCount(poolId), 1);
+        // to quote transactions with a reasonable priority fee
+        // we use previous block's top priority fee (1 gwei)
+        // in practice, the new block's first swap's priority fee will be high and ~equal to previous block's first swap
+        vm.fee(2 gwei);
+        vm.txGasPrice(2 gwei + 0.01 gwei);
+
+        BalanceDelta thirdSwap = swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
+        assertApproxEqRel(thirdSwap.amount1(), 1e18, 0.00009e18); // 0.0090% error: 0.0069% fee and price impact
     }
 }
