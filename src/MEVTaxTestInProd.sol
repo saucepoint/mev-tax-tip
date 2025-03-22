@@ -21,8 +21,12 @@ contract MEVTaxTestInProd is BaseHook, Owned {
 
     constructor(IPoolManager _poolManager, address _owner) BaseHook(_poolManager) Owned(_owner) {}
 
-    function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
+    function _beforeInitialize(address, PoolKey calldata key, uint160) internal override returns (bytes4) {
         require(key.fee == LPFeeLibrary.DYNAMIC_FEE_FLAG, "are u dumb or are u stupid");
+
+        // we be lazy as shit so set a max fee of 69 bips by default
+        maxFees[key.toId()] = 6_900;
+
         return BaseHook.beforeInitialize.selector;
     }
 
