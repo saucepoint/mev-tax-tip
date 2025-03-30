@@ -29,3 +29,18 @@ For example:
 ---
 
 Test in prod, so I have admin permissions to set the default max fee and the default minimum fee 🤷
+
+---
+
+## Disclaimer
+
+This Uniswap v4 Hook and Pool are provided herein is offered on an “as-is” basis and has not been audited for security, reliability, or compliance with any specific standards or regulations. It may contain bugs, errors, or vulnerabilities that could lead to unintended consequences.
+
+By utilizing this Uniswap v4 Hook, you acknowledge and agree that:
+
+- Assumption of Risk: You assume all responsibility and risks associated with its use.
+- No Warranty: The authors and distributors of this code, namely, saucepoint, disclaim all warranties, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, and non-infringement.
+- Limitation of Liability: In no event shall the authors or distributors be held liable for any damages or losses, including but not limited to direct, indirect, incidental, or consequential damages arising out of or in connection with the use or inability to use the code.
+- Recommendation: Users are strongly encouraged to review, test, and, if necessary, audit the community router independently before deploying in any environment.
+
+By proceeding to utilize this Uniswap v4 Hook, you indicate your understanding and acceptance of this disclaimer.
