@@ -92,7 +92,7 @@ contract MEVTaxTestInProdTest is Test, Fixtures {
 
         vm.txGasPrice(1 gwei + 0.01 gwei);
         BalanceDelta secondSwap = swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
-        assertApproxEqRel(secondSwap.amount1(), 1e18, 0.00008e18); // 0.008% error: 0.0069% fee and price impact
+        assertApproxEqRel(secondSwap.amount1(), 1e18, 0.0005e18); // 0.05% error: 0.0495% fee and price impact
 
         // second swap gets better output since their fee is much lower
         assertGt(secondSwap.amount1(), firstSwap.amount1());
@@ -107,6 +107,6 @@ contract MEVTaxTestInProdTest is Test, Fixtures {
         vm.txGasPrice(2 gwei + 0.01 gwei);
 
         BalanceDelta thirdSwap = swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
-        assertApproxEqRel(thirdSwap.amount1(), 1e18, 0.00009e18); // 0.0090% error: 0.0069% fee and price impact
+        assertApproxEqRel(thirdSwap.amount1(), 1e18, 0.0005e18); // 0.05% error: 0.0495% fee and price impact
     }
 }
