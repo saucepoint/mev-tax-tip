@@ -42,15 +42,15 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
 
         // --------------------------------- //
 
-        // tick range is +/- 25% of spot price
-        // calculating sqrt(price * 1.25e18/1e18) * Q96 is the same as
-        // (sqrt(price) * Q96) * (sqrt(0.9e18/1e18))
-        // (sqrt(price) * Q96) * (sqrt(0.9e18) / sqrt(1e18))
+        // tick range is +/- 20% of spot price
+        // calculating sqrt(price * 1.20e18/1e18) * Q96 is the same as
+        // (sqrt(price) * Q96) * (sqrt(1.20e18/1e18))
+        // (sqrt(price) * Q96) * (sqrt(1.20e18) / sqrt(1e18))
         int24 tickLower = TickMath.getTickAtSqrtPrice(
-            uint160(vanillaSqrtPrice * FixedPointMathLib.sqrt(0.75e18) / FixedPointMathLib.sqrt(1e18))
+            uint160(vanillaSqrtPrice * FixedPointMathLib.sqrt(0.8e18) / FixedPointMathLib.sqrt(1e18))
         );
         int24 tickUpper = TickMath.getTickAtSqrtPrice(
-            uint160(vanillaSqrtPrice * FixedPointMathLib.sqrt(1.25e18) / FixedPointMathLib.sqrt(1e18))
+            uint160(vanillaSqrtPrice * FixedPointMathLib.sqrt(1.2e18) / FixedPointMathLib.sqrt(1e18))
         );
 
         // multicall parameters
