@@ -22,8 +22,8 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
     using CurrencyLibrary for Currency;
     using StateLibrary for IPoolManager;
 
-    uint256 token0Amount = 1 ether;
-    uint256 token1Amount = 1900e6;
+    uint256 token0Amount = 0.5 ether;
+    uint256 token1Amount = 950e6;
 
     function run() external {
         // set the price equal to vanilla ETH/USDC 5 bip pool
