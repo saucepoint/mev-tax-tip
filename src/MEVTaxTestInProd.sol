@@ -15,9 +15,14 @@ import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 contract MEVTaxTestInProd is BaseHook, Owned {
     using PoolIdLibrary for PoolKey;
 
-    mapping(PoolId poolId => uint256 lastBlockSeen) public lastBlockSeen;
-    mapping(PoolId poolId => mapping(uint256 blockNumber => uint256 topPriorityFee)) public topPriorityFees;
-    mapping(PoolId poolId => uint256 maxFee) public maxFees;
+    struct Data {
+        uint128 lastBlockSeen;
+        uint64 minFee;
+        uint64 maxFee;
+    }
+
+    mapping(PoolId poolId => Data poolData) public poolData;
+    mapping(PoolId poolId => mapping(uint128 blockNumber => uint256 topPriorityFee)) public topPriorityFees;
 
     constructor(IPoolManager _poolManager, address _owner) BaseHook(_poolManager) Owned(_owner) {}
 
@@ -25,7 +30,8 @@ contract MEVTaxTestInProd is BaseHook, Owned {
         require(key.fee == LPFeeLibrary.DYNAMIC_FEE_FLAG, "are u dumb or are u stupid");
 
         // we be lazy as shit so set a max fee of 69 bips by default
-        maxFees[key.toId()] = 6_900;
+        poolData[key.toId()].minFee = 495; // 4.95 bips
+        poolData[key.toId()].maxFee = 6_900;
 
         return BaseHook.beforeInitialize.selector;
     }
@@ -37,20 +43,28 @@ contract MEVTaxTestInProd is BaseHook, Owned {
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         PoolId poolId = key.toId();
-        uint256 maxFee = maxFees[poolId];
-        uint256 topPriorityFee = topPriorityFees[poolId][lastBlockSeen[poolId]];
+        Data storage data = poolData[poolId];
+        uint128 lastBlockSeen = data.lastBlockSeen;
+        uint256 minFee = data.minFee;
+        uint256 maxFee = data.maxFee;
+        uint256 topPriorityFee = topPriorityFees[poolId][lastBlockSeen];
         uint256 txPriorityFee = tx.gasprice - block.basefee;
 
         // swap fee is priority fee proportional to the previous top priority fee: `maxFee * (txPriorityFee / topPriorityFee)`
         // safe casting because maxFee is capped at 10_000
         uint24 overrideFee = topPriorityFee != 0 ? uint24((maxFee * txPriorityFee) / topPriorityFee) : uint24(maxFee);
 
+        // override fee is a minimum of minFee
+        if (overrideFee < minFee) {
+            overrideFee = uint24(minFee);
+        }
+
         // set state for future blocks / transactions
-        if (lastBlockSeen[poolId] != block.number) {
-            lastBlockSeen[poolId] = block.number;
+        if (lastBlockSeen != block.number) {
+            data.lastBlockSeen = uint128(block.number);
 
             // txPriorityFee is the highest priority fee if this is the first tx in the block
-            topPriorityFees[poolId][block.number] = txPriorityFee;
+            topPriorityFees[poolId][uint128(block.number)] = txPriorityFee;
         }
 
         return (
@@ -60,10 +74,13 @@ contract MEVTaxTestInProd is BaseHook, Owned {
         );
     }
 
-    function setMaxFee(PoolId poolId, uint256 maxFee) external onlyOwner {
+    function setDefaultFee(PoolId poolId, uint64 minFee, uint64 maxFee) external onlyOwner {
         // maximum swap fee is 1%
         require(maxFee <= 10_000, "yo price too high u need to cut ittttt");
-        maxFees[poolId] = maxFee;
+        require(minFee < maxFee, "baka");
+        Data storage data = poolData[poolId];
+        data.minFee = minFee;
+        data.maxFee = maxFee;
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
