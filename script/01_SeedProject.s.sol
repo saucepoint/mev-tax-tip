@@ -23,7 +23,7 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
     using StateLibrary for IPoolManager;
 
     uint256 token0Amount = 0.5 ether;
-    uint256 token1Amount = 950e6;
+    uint256 token1Amount = 975e6;
 
     function run() external {
         // set the price equal to vanilla ETH/USDC 5 bip pool
@@ -53,8 +53,12 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
             uint160(vanillaSqrtPrice * FixedPointMathLib.sqrt(1.2e18) / FixedPointMathLib.sqrt(1e18))
         );
 
+        // align ticks
+        tickLower = tickLower - (tickLower % 10);
+        tickUpper = tickUpper - (tickUpper % 10);
+
         // multicall parameters
-        bytes[] memory params = new bytes[](3);
+        bytes[] memory params = new bytes[](2);
 
         // initialize pool
         params[0] = abi.encodeWithSelector(posm.initializePool.selector, pool, vanillaSqrtPrice, hookData);
@@ -68,7 +72,7 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
             tickUpper,
             token0Amount,
             token1Amount,
-            address(this),
+            msg.sender,
             hookData
         );
         params[1] = abi.encodeWithSelector(
@@ -96,23 +100,24 @@ contract CreatePoolAndAddLiquidityScript is Script, Constants, Config {
         uint256 amount1,
         address recipient,
         bytes memory hookData
-    ) internal pure returns (bytes memory, bytes[] memory, uint256 amount0Max) {
+    ) internal view returns (bytes memory, bytes[] memory, uint256 amount0Max) {
         bytes memory actions =
-            abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+            abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR), uint8(Actions.SWEEP));
 
         // Converts token amounts to liquidity units
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPrice, TickMath.getSqrtPriceAtTick(tickLower), TickMath.getSqrtPriceAtTick(tickUpper), amount0, amount1
         );
 
-        bytes[] memory params = new bytes[](2);
+        bytes[] memory params = new bytes[](4);
         params[0] = abi.encode(
             poolKey0, tickLower, tickUpper, liquidity, amount0 + 1000 wei, amount1 + 1000 wei, recipient, hookData
         );
         params[1] = abi.encode(
             poolKey1, tickLower, tickUpper, liquidity, amount0 + 1000 wei, amount1 + 1000 wei, recipient, hookData
         );
-        params[1] = abi.encode(poolKey0.currency0, poolKey0.currency1);
+        params[2] = abi.encode(poolKey0.currency0, poolKey0.currency1);
+        params[3] = abi.encode(poolKey1.currency0, msg.sender);
         return (actions, params, amount0 * 2 + 2000 wei);
     }
 

@@ -10,7 +10,7 @@ contract Config {
     /// @dev populated with default anvil addresses
     IERC20 constant token0 = IERC20(address(0)); // native eth
     IERC20 constant token1 = IERC20(address(0x078D782b760474a361dDA0AF3839290b0EF57AD6)); // USDC on unichain
-    IHooks constant hookContract = IHooks(address(0x0));
+    IHooks constant hookContract = IHooks(address(0xB9a17e66DB950e00822c2b833d6BB304C9b86080));
 
     Currency constant currency0 = Currency.wrap(address(token0));
     Currency constant currency1 = Currency.wrap(address(token1));
