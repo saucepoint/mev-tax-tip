@@ -72,6 +72,10 @@ contract MEVTaxBaboon is BaseHook, Owned {
         );
     }
 
+    function _runningAverage(PoolId poolId) internal view returns (uint64) {
+        return runningAverage[poolId];
+    }
+
     function setDefaultFee(PoolId poolId, uint64 minFee, uint64 maxFee) external onlyOwner {
         // maximum swap fee is 1%
         require(maxFee <= 10_000, "yo price too high u need to cut ittttt");
